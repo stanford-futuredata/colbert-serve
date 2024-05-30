@@ -74,8 +74,8 @@ class ColBERTServer(server_pb2_grpc.ServerServicer):
         self.colbert_search_config = ColBERTConfig(
             index_root=os.path.join(os.environ["DATA_PATH"], "experiments/default/indexes"),
             experiment=self.index_name,
-            load_collection_with_mmap=False,
-            load_index_with_mmap=True,
+            load_collection_with_mmap=True,
+            load_index_with_mmap=bool(os.environ["MMAP"]),
             gpus=0,
         )
 
