@@ -3,7 +3,7 @@ import torch
 import splade_pb2
 import splade_pb2_grpc
 from transformers import AutoModelForMaskedLM, AutoTokenizer
-from splade.models.transformer_rep import Splade
+from splade.splade.models.transformer_rep import Splade
 from concurrent import futures
 
 class SpladeServer(splade_pb2_grpc.SpladeServicer):

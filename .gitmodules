@@ -4,3 +4,6 @@
 [submodule "pisa"]
 	path = pisa
 	url = git@github.com:pisa-engine/pisa.git
+[submodule "splade_server/splade"]
+	path = splade_server/splade
+	url = git@github.com:naver/splade.git
