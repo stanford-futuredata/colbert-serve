@@ -10,7 +10,6 @@ import os.path
 import json
 
 import time
-import csv
 
 load_dotenv()
 
@@ -25,9 +24,21 @@ from colbert.infra.run import Run
 from colbert.infra.config import ColBERTConfig
 from dotenv import load_dotenv
 import pathlib
+from transformers import AutoTokenizer
+from colbert.modeling.base_colbert import BaseColBERT
 
 import splade_pb2
 import splade_pb2_grpc
+
+
+class ColBERT(torch.nn.Module):
+    def __init__(self, lm, linear):
+        super().__init__()
+        self.lm = lm
+        self.linear = linear
+    def forward(self, input_ids, attention_mask):
+        return self.linear(self.lm(input_ids, attention_mask)[0])
+
 
 class ColBERTServer(server_pb2_grpc.ServerServicer):
     def __init__(self, num_workers, index):
@@ -37,26 +48,63 @@ class ColBERTServer(server_pb2_grpc.ServerServicer):
         self.index_name = "wiki.2018.latest" if index == "wiki" else "lifestyle.dev.nbits=2.latest"
         self.multiplier = 250 if index == "wiki" else 500
         self.index_name += self.suffix
-        prefix = os.environ["DATA_PATH"]
-        gold_rankings_files = f"{prefix}/{index}/rankings.tsv"
-        self.gold_ranks = defaultdict(list)
+        self.prefix = os.environ["DATA_PATH"]
 
         channel = grpc.insecure_channel('localhost:50060')
         self.splade_stub = splade_pb2_grpc.SpladeStub(channel)
 
-        with open(gold_rankings_files, newline='', encoding='utf-8') as tsvfile:
-            tsv_reader = csv.reader(tsvfile, delimiter='\t')
-            for line in tsv_reader:
-                self.gold_ranks[int(line[0])].append(int(line[1]))
-        
-        config = Run().config
-        config = ColBERTConfig.from_existing(None, config)
-        config.load_index_with_mmap = self.suffix != ""
-        self.searcher = Searcher(index=f"{prefix}/indexes/{self.index_name}/", config=config)
-        self.ranker = self.searcher.ranker
-        
-        if os.path.isfile(f"{prefix}/{index}/encodings.pt"):
-            self.enc = torch.load(f"{prefix}/{index}/encodings.pt")
+        colbert_query_encoder_config = {
+            "max_length": 32,
+            "q_marker_token_id": 1,
+            "mask_token_id": 103,
+            "self.cls_token": 101,
+            "pad_token_id": 0,
+            "device": "cpu",
+        }
+
+        checkpoint_path = self.prefix + "/msmarco.psg.kldR2.nway64.ib__colbert-400000/"
+        self.colbert_tokenizer = AutoTokenizer.from_pretrained(checkpoint_path)
+        base_model = BaseColBERT(checkpoint_path)
+        lm = base_model.model.LM
+        linear = base_model.model.linear
+        self.colbert_query_encoder = (
+            ColBERT(lm, linear).eval().to(colbert_query_encoder_config["device"])
+        )
+
+        self.colbert_search_config = ColBERTConfig(
+            index_root=os.path.join(os.environ["DATA_PATH"], "experiments/default/indexes"),
+            experiment=self.index_name,
+            load_collection_with_mmap=False,
+            load_index_with_mmap=True,
+            gpus=0,
+        )
+
+        self.colbert_searcher = Searcher(
+            index=self.index_name,
+            checkpoint=checkpoint_path,
+            config=self.colbert_search_config,
+        )
+
+    def colbert_search(self, Q, pids, k=5):
+        return self.colbert_searcher.dense_search(Q, k=k, pids=pids)
+
+
+    def colbert_encode(self, queries):
+        with torch.no_grad():
+            inputs = [". " + query for query in queries]
+            tokens = self.colbert_tokenizer(
+                inputs,
+                padding="max_length",
+                truncation=True,
+                return_tensors="pt",
+                max_length=self.colbert_query_encoder_config["max_length"],
+            )
+            ids, mask = tokens["input_ids"], tokens["attention_mask"]
+            ids[:, 1] = self.colbert_query_encoder_config["q_marker_token_id"]
+            ids[ids == self.colbert_query_encoder_confignfig["pad_token_id"]] = self.colbert_query_encoder_config["mask_token_id"]
+            embeddings = self.colbert_query_encoder(ids, mask)
+            return embeddings
+
 
     def convert_dict_to_protobuf(self, input_dict):
         query_result = server_pb2.QueryResult()
@@ -81,8 +129,8 @@ class ColBERTServer(server_pb2_grpc.ServerServicer):
         response = requests.post(url, data=json.dumps(data), headers=headers).text
         response = json.loads(response).get('results', {})
         gr = torch.tensor([int(x) for x in response.keys()], dtype=torch.int)
-        Q = self.searcher.encode([query]) if not self.skip_encoding else self.enc[qid]
-        scores_, pids_ = self.ranker.score_raw_pids(self.searcher.config, Q, gr)
+        Q = self.colbert_encode([query])
+        pids_, ranks_, scores_ = self.colbert_search(Q, gr, 200)
         print("Searching time of {} on node {}: {}".format(qid, self.tag, time.time() - t2))
 
         scores_sorter = scores_.sort(descending=True)
@@ -95,10 +143,8 @@ class ColBERTServer(server_pb2_grpc.ServerServicer):
 
     def api_search_query(self, query, qid, k=100):
         t2 = time.time()
-        if not self.skip_encoding:
-            pids, ranks, scores = self.searcher.search(query, k)
-        else:
-            pids, ranks, scores = self.searcher.dense_search(self.enc[qid], k)
+        pids, ranks, scores = self.searcher.search(query, k)
+
         print("Searching time of {}: {}".format(qid, time.time() - t2))
 
         top_k = []
@@ -111,16 +157,13 @@ class ColBERTServer(server_pb2_grpc.ServerServicer):
     def api_pisa_query(self, query, qid, k=100):
         t2 = time.time()
         splade_q = self.splade_stub.GenerateQuery(splade_pb2.QueryStr(query=query, multiplier=self.multiplier))
-        # print("Splade time", time.time()-t2)
         url = 'http://localhost:8080'
         data = {"query": splade_q.query, "k": 200}
-        # data = {"query": query, "k": 200}
         headers = {'Content-Type': 'application/json'}
 
         tpost = time.time()
         response = requests.post(url, data=json.dumps(data), headers=headers).text
         response = json.loads(response).get('results', {})
-        # print("Searching time of {} on node {}: {}".format(qid, self.tag, time.time() - t2))
 
         pids_ = []
         scores_ = []
