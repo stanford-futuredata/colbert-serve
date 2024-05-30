@@ -94,8 +94,6 @@ if __name__ == '__main__':
                         help='Output file to save rankings')
     parser.add_argument('-t', '--timings', type=str, required=True,
                         help='Input file for inter request wait times')
-    parser.add_argument('-s', '--skip_encoding', action='store_true',
-                        help='Use precomputed encoding')
     parser.add_argument('-e', '--experiment', type=str, default="search", choices=["search", "pisa", "serve"],
                         help='search or pisa or serve (pisa + rerank)')
     parser.add_argument('-i', '--index', type=str, choices=["wiki", "lifestyle"],
@@ -111,8 +109,7 @@ if __name__ == '__main__':
     for node in range(args.num_servers):
         print("Starting process", node)
         arg_str = f"-w {args.num_workers} -i {args.index}" 
-        if args.skip_encoding: arg_str += " -s"
-        processes.append(Popen(["python", "eval_server.py"] + f"{arg_str}".split(" ")))
+        processes.append(Popen(["python", "server.py"] + f"{arg_str}".split(" ")))
 
         times = 10
         for i in range(times):

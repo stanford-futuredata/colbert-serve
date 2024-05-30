@@ -30,7 +30,7 @@ import splade_pb2
 import splade_pb2_grpc
 
 class ColBERTServer(server_pb2_grpc.ServerServicer):
-    def __init__(self, num_workers, index, skip_encoding):
+    def __init__(self, num_workers, index):
         self.tag = 0
         self.threads = num_workers
         self.suffix = ""
@@ -40,7 +40,6 @@ class ColBERTServer(server_pb2_grpc.ServerServicer):
         prefix = os.environ["DATA_PATH"]
         gold_rankings_files = f"{prefix}/{index}/rankings.tsv"
         self.gold_ranks = defaultdict(list)
-        self.skip_encoding = skip_encoding
 
         channel = grpc.insecure_channel('localhost:50060')
         self.splade_stub = splade_pb2_grpc.SpladeStub(channel)
@@ -53,19 +52,11 @@ class ColBERTServer(server_pb2_grpc.ServerServicer):
         config = Run().config
         config = ColBERTConfig.from_existing(None, config)
         config.load_index_with_mmap = self.suffix != ""
-        print(config)
         self.searcher = Searcher(index=f"{prefix}/indexes/{self.index_name}/", config=config)
         self.ranker = self.searcher.ranker
         
         if os.path.isfile(f"{prefix}/{index}/encodings.pt"):
             self.enc = torch.load(f"{prefix}/{index}/encodings.pt")
-        elif skip_encoding:
-            queries = Queries(path=f"{prefix}/{index}/questions.tsv")
-            qvals = list(queries.items())
-            self.enc = {}
-            for q in qvals:
-                self.enc[q[0]] = self.searcher.encode([q[1]])
-            torch.save(self.enc, f"{prefix}/{index}/encodings.pt")
 
     def convert_dict_to_protobuf(self, input_dict):
         query_result = server_pb2.QueryResult()
@@ -177,8 +168,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Server for ColBERT')
     parser.add_argument('-w', '--num_workers', type=int, required=True,
                        help='Number of worker threads per server')
-    parser.add_argument('-s', '--skip_encoding', action='store_true',
-                        help='Use precomputed encoding')
     parser.add_argument('-i', '--index', type=str, choices=["wiki", "lifestyle"],
                         required=True, help='Index to run')
 
