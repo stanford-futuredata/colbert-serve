@@ -1,3 +1,6 @@
 [submodule "ColBERT"]
 	path = ColBERT
 	url = git@github.com:stanford-futuredata/ColBERT.git
+[submodule "pisa"]
+	path = pisa
+	url = git@github.com:pisa-engine/pisa.git
