@@ -5,23 +5,26 @@ from concurrent import futures
 import torch
 import server_pb2
 import server_pb2_grpc
-import psutil
 from multiprocessing.connection import Listener
-import gc
-from colbert.data import Queries
 import os.path
 import json
 
 import time
 import csv
 
+load_dotenv()
+
+sys.path.append(os.environ["SPLADE_PATH"])
+sys.path.append(str(pathlib.Path(__file__).parent.resolve()) + "/ColBERT")
+
 from colbert import Searcher
+from colbert.data import Queries
 from collections import defaultdict
 import requests
 from colbert.infra.run import Run
 from colbert.infra.config import ColBERTConfig
-
-sys.path.append(os.environ["SPLADE_PATH"])
+from dotenv import load_dotenv
+import pathlib
 
 import splade_pb2
 import splade_pb2_grpc
@@ -34,7 +37,7 @@ class ColBERTServer(server_pb2_grpc.ServerServicer):
         self.index_name = "wiki.2018.latest" if index == "wiki" else "lifestyle.dev.nbits=2.latest"
         self.multiplier = 250 if index == "wiki" else 500
         self.index_name += self.suffix
-        prefix = "/home/ubuntu/data"
+        prefix = os.environ["DATA_PATH"]
         gold_rankings_files = f"{prefix}/{index}/rankings.tsv"
         self.gold_ranks = defaultdict(list)
         self.skip_encoding = skip_encoding
