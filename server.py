@@ -31,6 +31,7 @@ from dotenv import load_dotenv
 import pathlib
 from transformers import AutoTokenizer
 from colbert.modeling.base_colbert import BaseColBERT
+import ast
 
 import splade_pb2
 import splade_pb2_grpc
@@ -49,7 +50,9 @@ class ColBERTServer(server_pb2_grpc.ServerServicer):
     def __init__(self, num_workers, index):
         self.tag = 0
         self.threads = num_workers
-        self.suffix = "" if not bool(os.environ["MMAP"]) else ".mmap"
+        mmap = ast.literal_eval(os.environ["MMAP"])
+        print(mmap)
+        self.suffix = "" if not mmap else ".mmap"
         self.index_name = "wiki.2018.latest" if index == "wiki" else "lifestyle.dev.nbits=2.latest"
         self.multiplier = 250 if index == "wiki" else 500
         self.index_name += self.suffix
@@ -85,8 +88,8 @@ class ColBERTServer(server_pb2_grpc.ServerServicer):
         self.colbert_search_config = ColBERTConfig(
             index_root=os.path.join(os.environ["DATA_PATH"], "indexes"),
             experiment=self.index_name,
-            load_collection_with_mmap=True,
-            load_index_with_mmap=bool(os.environ["MMAP"]),
+            load_collection_with_mmap=mmap,
+            load_index_with_mmap=mmap,
         )
 
         
