@@ -11,6 +11,15 @@ import argparse
 import time
 import os
 from multiprocessing.connection import Client
+
+from dotenv import load_dotenv
+import pathlib
+
+load_dotenv()
+
+print(str(pathlib.Path(__file__).parent.resolve()) + "/ColBERT")
+sys.path.append(str(pathlib.Path(__file__).parent.resolve()) + "/ColBERT")
+
 from colbert.data import Queries
 
 def save_rankings(rankings, filename):
@@ -39,7 +48,7 @@ async def run_request(stub, request, experiment):
 async def run(args):
     print("Main process running on CPU", psutil.Process().cpu_num())
     nodes = args.num_servers
-    queries = Queries(path=f"/home/ubuntu/data/{args.index}/questions.tsv")
+    queries = Queries(path=f"{os.environ['DATA_PATH']}/{args.index}/questions.tsv")
     qvals = list(queries.items())
     tasks = []
     channels = []
@@ -53,6 +62,7 @@ async def run(args):
     length = len(inter_request_time)
 
     # Warmup
+    """
     for i in range(len(qvals)-100, len(qvals)):
         request = server_pb2.Query(query=qvals[i][1], qid=qvals[i][0], k=100)
         tasks.append(asyncio.ensure_future(run_request(stubs[i % nodes], request, args.experiment)))
@@ -61,11 +71,12 @@ async def run(args):
     await asyncio.gather(*tasks)
 
     print("Warmup complete!")
+    """
 
     tasks = []
     t = time.time()
 
-    for i in range(2000):
+    for i in range(len(qvals)):
         print(i, channels[i % nodes])
         request = server_pb2.Query(query=qvals[i][1], qid=qvals[i][0], k=100)
         tasks.append(asyncio.ensure_future(run_request(stubs[i % nodes], request,  args.experiment)))

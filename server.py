@@ -8,12 +8,16 @@ import server_pb2_grpc
 from multiprocessing.connection import Listener
 import os.path
 import json
+import numpy as np
 
+import pathlib
 import time
+from dotenv import load_dotenv
 
 load_dotenv()
 
 sys.path.append(os.environ["SPLADE_PATH"])
+print(str(pathlib.Path(__file__).parent.resolve()) + "/ColBERT")
 sys.path.append(str(pathlib.Path(__file__).parent.resolve()) + "/ColBERT")
 
 from colbert import Searcher
@@ -44,7 +48,7 @@ class ColBERTServer(server_pb2_grpc.ServerServicer):
     def __init__(self, num_workers, index):
         self.tag = 0
         self.threads = num_workers
-        self.suffix = ""
+        self.suffix = "" if not bool(os.environ["MMAP"]) else ".mmap"
         self.index_name = "wiki.2018.latest" if index == "wiki" else "lifestyle.dev.nbits=2.latest"
         self.multiplier = 250 if index == "wiki" else 500
         self.index_name += self.suffix
@@ -53,7 +57,7 @@ class ColBERTServer(server_pb2_grpc.ServerServicer):
         channel = grpc.insecure_channel('localhost:50060')
         self.splade_stub = splade_pb2_grpc.SpladeStub(channel)
 
-        colbert_query_encoder_config = {
+        self.colbert_query_encoder_config = {
             "max_length": 32,
             "q_marker_token_id": 1,
             "mask_token_id": 103,
@@ -62,28 +66,44 @@ class ColBERTServer(server_pb2_grpc.ServerServicer):
             "device": "cpu",
         }
 
+        self.colbert_results = []
+        self.pisa_results = []
+
         checkpoint_path = self.prefix + "/msmarco.psg.kldR2.nway64.ib__colbert-400000/"
         self.colbert_tokenizer = AutoTokenizer.from_pretrained(checkpoint_path)
         base_model = BaseColBERT(checkpoint_path)
         lm = base_model.model.LM
         linear = base_model.model.linear
         self.colbert_query_encoder = (
-            ColBERT(lm, linear).eval().to(colbert_query_encoder_config["device"])
+            ColBERT(lm, linear).eval().to(self.colbert_query_encoder_config["device"])
         )
 
         self.colbert_search_config = ColBERTConfig(
-            index_root=os.path.join(os.environ["DATA_PATH"], "experiments/default/indexes"),
+            index_root=os.path.join(os.environ["DATA_PATH"], "indexes"),
             experiment=self.index_name,
             load_collection_with_mmap=True,
             load_index_with_mmap=bool(os.environ["MMAP"]),
-            gpus=0,
         )
+
 
         self.colbert_searcher = Searcher(
             index=self.index_name,
             checkpoint=checkpoint_path,
             config=self.colbert_search_config,
         )
+
+    def dump(self):
+        # if len(self.colbert_results) < 100 * 8740:
+        #     return
+
+        print(len(self.colbert_results), len(self.pisa_results))
+
+        pisa_file = open("ranking_pisa.tsv", "w")
+        pisa_file.write("\n".join(["\t".join(x) for x in sorted(self.pisa_results, key=lambda x: (int(x[0]), int(x[2])))])) 
+        pisa_file.close()
+        colbert_file = open("ranking_colbert.tsv", "w")
+        colbert_file.write("\n".join(["\t".join(x) for x in sorted(self.colbert_results, key=lambda x: (int(x[0]), int(x[2])))])) 
+        colbert_file.close()
 
     def colbert_search(self, Q, pids, k=5):
         return self.colbert_searcher.dense_search(Q, k=k, pids=pids)
@@ -101,7 +121,7 @@ class ColBERTServer(server_pb2_grpc.ServerServicer):
             )
             ids, mask = tokens["input_ids"], tokens["attention_mask"]
             ids[:, 1] = self.colbert_query_encoder_config["q_marker_token_id"]
-            ids[ids == self.colbert_query_encoder_confignfig["pad_token_id"]] = self.colbert_query_encoder_config["mask_token_id"]
+            ids[ids == self.colbert_query_encoder_config["pad_token_id"]] = self.colbert_query_encoder_config["mask_token_id"]
             embeddings = self.colbert_query_encoder(ids, mask)
             return embeddings
 
@@ -128,22 +148,51 @@ class ColBERTServer(server_pb2_grpc.ServerServicer):
         
         response = requests.post(url, data=json.dumps(data), headers=headers).text
         response = json.loads(response).get('results', {})
-        gr = torch.tensor([int(x) for x in response.keys()], dtype=torch.int)
-        Q = self.colbert_encode([query])
-        pids_, ranks_, scores_ = self.colbert_search(Q, gr, 200)
-        print("Searching time of {} on node {}: {}".format(qid, self.tag, time.time() - t2))
+        # print("Searching time of {} on node 1 {}: {}".format(qid, self.tag, time.time() - t2))
+        
+        # for idxx, (ky, vl) in enumerate(sorted(response.items(), key=lambda x: -float(x[1]))):
+        #    self.pisa_results.append((f"{int(qid)}", f"{int(ky)}", f"{int(idxx+1)}", f"{float(vl)}"))
 
-        scores_sorter = scores_.sort(descending=True)
-        pids_, scores_ = pids_[scores_sorter.indices].tolist(), scores_sorter.values.tolist()
+
+        docs = np.array([int(x) for x in sorted(response.keys())])
+        pisa_score = np.array([float(response[x]) for x in sorted(response.keys())])
+        pisa_score = (pisa_score - pisa_score.mean()) / pisa_score.std()
+
+        gr = torch.tensor(docs, dtype=torch.int)
+        Q = self.colbert_encode([query])
+        # print("Searching time of {} on node 2 {}: {}".format(qid, self.tag, time.time() - t2))
+        pids_, _, scores_ = self.colbert_search(Q, gr, 200)
+        
+        print("Searching time of {} on node {}: {}".format(qid, self.tag, time.time() - t2))
+        
+        # for idxx, (ky, vl) in enumerate(sorted(colbert_scores.items(), key=lambda x: -x[1])):
+        #    self.colbert_results.append((f"{int(qid)}", f"{int(ky)}", f"{int(idxx+1)}", f"{float(vl)}"))
+        
+        scores_ = np.array(scores_)
+        scores_ = (scores_ - scores_.mean()) / scores_.std()
+        
+        combined_scores = {}
+        
+        for d, v in zip(pids_, scores_):
+            combined_scores[d] = 0.5 * v
+        
+        for d, v in zip(docs, pisa_score):
+            combined_scores[d] += 0.5 * v
+
+        # self.dump()
+        sorted_pids = sorted(combined_scores.items(), key=lambda x: -x[1])
+        
         top_k = []
-        for pid, rank, score in zip(pids_, range(len(pids_)), scores_):
+        for rank, (pid, score) in enumerate(sorted_pids):
             top_k.append({'pid': pid, 'rank': rank + 1, 'score': score})
 
         return self.convert_dict_to_protobuf({"qid": qid, "topk": top_k[:k]})
 
+
     def api_search_query(self, query, qid, k=100):
         t2 = time.time()
-        pids, ranks, scores = self.searcher.search(query, k)
+        Q = self.colbert_encode([query])
+        pids, ranks, scores = self.colbert_search(Q, None, k)
 
         print("Searching time of {}: {}".format(qid, time.time() - t2))
 
@@ -151,6 +200,14 @@ class ColBERTServer(server_pb2_grpc.ServerServicer):
         for pid, rank, score in zip(pids, ranks, scores):
             top_k.append({'pid': pid, 'rank': rank, 'score': score})
         top_k = list(sorted(top_k, key=lambda p: (-1 * p['score'], p['pid'])))
+
+        combined_scores = {}
+        for d, v in zip(pids, scores):
+            combined_scores[d] = v
+        
+        self.dump()
+        for idxx, (ky, vl) in enumerate(sorted(combined_scores.items(), key=lambda x: -x[1])):
+            self.colbert_results.append((f"{int(qid)}", f"{int(ky)}", f"{int(idxx+1)}", f"{float(vl)}"))
 
         return self.convert_dict_to_protobuf({"qid": qid, "topk": top_k})
 
@@ -196,7 +253,7 @@ class ColBERTServer(server_pb2_grpc.ServerServicer):
 def serve_ColBERT_server(args):
     connection = Listener(('localhost', 50040), authkey=b'password').accept()
     server = grpc.server(futures.ThreadPoolExecutor())
-    server_pb2_grpc.add_ServerServicer_to_server(ColBERTServer(args.num_workers, args.index, args.skip_encoding), server)
+    server_pb2_grpc.add_ServerServicer_to_server(ColBERTServer(args.num_workers, args.index), server)
     listen_addr = '[::]:50050'
     server.add_insecure_port(listen_addr)
     print(f"Starting ColBERT server on {listen_addr}")
