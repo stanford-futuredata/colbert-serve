@@ -214,7 +214,7 @@ class ColBERTServer(server_pb2_grpc.ServerServicer):
         for d, v in zip(pids, scores):
             combined_scores[d] = v
         
-        self.dump()
+        # self.dump()
         for idxx, (ky, vl) in enumerate(sorted(combined_scores.items(), key=lambda x: -x[1])):
             self.colbert_results.append((f"{int(qid)}", f"{int(ky)}", f"{int(idxx+1)}", f"{float(vl)}"))
 
