@@ -13,6 +13,7 @@ import numpy as np
 import pathlib
 import time
 from dotenv import load_dotenv
+import psutil
 
 load_dotenv()
 
@@ -68,15 +69,18 @@ class ColBERTServer(server_pb2_grpc.ServerServicer):
 
         self.colbert_results = []
         self.pisa_results = []
+        
 
+        process = psutil.Process()
+        print(process.memory_info().rss)
         checkpoint_path = self.prefix + "/msmarco.psg.kldR2.nway64.ib__colbert-400000/"
-        self.colbert_tokenizer = AutoTokenizer.from_pretrained(checkpoint_path)
+        """self.colbert_tokenizer = AutoTokenizer.from_pretrained(checkpoint_path)
         base_model = BaseColBERT(checkpoint_path)
         lm = base_model.model.LM
         linear = base_model.model.linear
         self.colbert_query_encoder = (
             ColBERT(lm, linear).eval().to(self.colbert_query_encoder_config["device"])
-        )
+        )"""
 
         self.colbert_search_config = ColBERTConfig(
             index_root=os.path.join(os.environ["DATA_PATH"], "indexes"),
@@ -85,12 +89,14 @@ class ColBERTServer(server_pb2_grpc.ServerServicer):
             load_index_with_mmap=bool(os.environ["MMAP"]),
         )
 
-
+        
+        print(process.memory_info().rss)
         self.colbert_searcher = Searcher(
             index=self.index_name,
             checkpoint=checkpoint_path,
             config=self.colbert_search_config,
         )
+        print(process.memory_info().rss)
 
     def dump(self):
         # if len(self.colbert_results) < 100 * 8740:
@@ -110,7 +116,7 @@ class ColBERTServer(server_pb2_grpc.ServerServicer):
 
 
     def colbert_encode(self, queries):
-        with torch.no_grad():
+        """with torch.no_grad():
             inputs = [". " + query for query in queries]
             tokens = self.colbert_tokenizer(
                 inputs,
@@ -123,7 +129,8 @@ class ColBERTServer(server_pb2_grpc.ServerServicer):
             ids[:, 1] = self.colbert_query_encoder_config["q_marker_token_id"]
             ids[ids == self.colbert_query_encoder_config["pad_token_id"]] = self.colbert_query_encoder_config["mask_token_id"]
             embeddings = self.colbert_query_encoder(ids, mask)
-            return embeddings
+            return embeddings"""
+        return self.colbert_searcher.encode([". " + query for query in queries])
 
 
     def convert_dict_to_protobuf(self, input_dict):
