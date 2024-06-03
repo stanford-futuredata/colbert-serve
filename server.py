@@ -74,8 +74,6 @@ class ColBERTServer(server_pb2_grpc.ServerServicer):
         self.pisa_results = []
         
 
-        process = psutil.Process()
-        print(process.memory_info().rss)
         checkpoint_path = self.prefix + "/msmarco.psg.kldR2.nway64.ib__colbert-400000/"
         """self.colbert_tokenizer = AutoTokenizer.from_pretrained(checkpoint_path)
         base_model = BaseColBERT(checkpoint_path)
@@ -88,18 +86,19 @@ class ColBERTServer(server_pb2_grpc.ServerServicer):
         self.colbert_search_config = ColBERTConfig(
             index_root=os.path.join(os.environ["DATA_PATH"], "indexes"),
             experiment=self.index_name,
-            load_collection_with_mmap=mmap,
+            load_collection_with_mmap=True,
             load_index_with_mmap=mmap,
         )
 
         
-        print(process.memory_info().rss)
+        process = psutil.Process()
+        mem1 = process.memory_info().rss
         self.colbert_searcher = Searcher(
             index=self.index_name,
             checkpoint=checkpoint_path,
             config=self.colbert_search_config,
         )
-        print(process.memory_info().rss)
+        print(f"MMAP: {mmap}, Index size: {(process.memory_info().rss - mem1) / 1024}")
 
     def dump(self):
         # if len(self.colbert_results) < 100 * 8740:
