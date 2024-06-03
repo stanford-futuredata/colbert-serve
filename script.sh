@@ -7,7 +7,7 @@ index="wiki"
 for lambda in "${lambda_values[@]}"; do
 	for exp in "${exps[@]}"; do
 	    input_file="traces/trace_lam_${lambda}.txt"
-	    mkdir -p final_results_lifestyle_threads_1/${exp}
+	    mkdir -p final_results_${index}/${exp}
 	    timing_output="final_results_${index}/${exp}/timing_${lambda}.txt"
 	    rankings_output="final_results_${index}/${exp}/rankings_${lambda}.tsv"
 	    
