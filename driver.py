@@ -90,6 +90,8 @@ async def run(args):
     open(args.output, "w").write("\n".join([str(x) for x in ret[1]]) + f"\nTotal time: {total_time}")
     print(f"Total time for {len(qvals)-100} requests:",  total_time)
 
+    await stubs[0].DumpScores(server_pb2.Empty())
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Evaluator for ColBERT')
     parser.add_argument('-w', '--num_workers', type=int, required=True,

@@ -6,6 +6,7 @@ service Server {
   rpc Search(Query) returns (QueryResult) {}
   rpc Pisa(Query) returns (QueryResult) {}
   rpc Serve(Query) returns (QueryResult) {}
+  rpc DumpScores(Empty) returns (Empty) {}
 }
 
 message Query {
@@ -23,4 +24,7 @@ message TopkResult {
 message QueryResult {
   int32 qid = 1;
   repeated TopkResult topk = 2;
+}
+
+message Empty {
 }

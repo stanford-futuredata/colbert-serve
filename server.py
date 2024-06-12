@@ -47,11 +47,8 @@ class ColBERT(torch.nn.Module):
 
 class ColBERTServer(server_pb2_grpc.ServerServicer):
     def __init__(self, num_workers, index, mmap):
-        self.tag = 0
         self.threads = num_workers
-        print(mmap)
         self.suffix = "" if not mmap else ".mmap"
-        # self.index_name = "wiki.2018.latest" if index == "wiki" else "lifestyle.dev.nbits=2.latest"
         
         if index == "wiki":
             self.index_name = "wiki.2018.latest"
@@ -81,13 +78,6 @@ class ColBERTServer(server_pb2_grpc.ServerServicer):
         
 
         checkpoint_path = self.prefix + "/msmarco.psg.kldR2.nway64.ib__colbert-400000/"
-        """self.colbert_tokenizer = AutoTokenizer.from_pretrained(checkpoint_path)
-        base_model = BaseColBERT(checkpoint_path)
-        lm = base_model.model.LM
-        linear = base_model.model.linear
-        self.colbert_query_encoder = (
-            ColBERT(lm, linear).eval().to(self.colbert_query_encoder_config["device"])
-        )"""
 
         self.colbert_search_config = ColBERTConfig(
             index_root=os.path.join(os.environ["DATA_PATH"], "indexes"),
@@ -107,37 +97,21 @@ class ColBERTServer(server_pb2_grpc.ServerServicer):
         print(f"MMAP: {mmap}, Index size: {(process.memory_info().rss - mem1) / 1024}")
 
     def dump(self):
-        # if len(self.colbert_results) < 100 * 8740:
-        #     return
-
-        print(len(self.colbert_results), len(self.pisa_results))
-
-        pisa_file = open("ranking_pisa.tsv", "w")
-        pisa_file.write("\n".join(["\t".join(x) for x in sorted(self.pisa_results, key=lambda x: (int(x[0]), int(x[2])))])) 
-        pisa_file.close()
-        colbert_file = open("ranking_colbert.tsv", "w")
-        colbert_file.write("\n".join(["\t".join(x) for x in sorted(self.colbert_results, key=lambda x: (int(x[0]), int(x[2])))])) 
-        colbert_file.close()
+        if self.pisa_results:
+            pisa_file = open("ranking_pisa.tsv", "w")
+            pisa_file.write("\n".join(["\t".join(x) for x in sorted(self.pisa_results, key=lambda x: (int(x[0]), int(x[2])))])) 
+            pisa_file.close()
+        
+        if self.colbert_results:
+            colbert_file = open("ranking_colbert.tsv", "w")
+            colbert_file.write("\n".join(["\t".join(x) for x in sorted(self.colbert_results, key=lambda x: (int(x[0]), int(x[2])))])) 
+            colbert_file.close()
 
     def colbert_search(self, Q, pids, k=5):
         return self.colbert_searcher.dense_search(Q, k=k, pids=pids)
 
 
     def colbert_encode(self, queries):
-        """with torch.no_grad():
-            inputs = [". " + query for query in queries]
-            tokens = self.colbert_tokenizer(
-                inputs,
-                padding="max_length",
-                truncation=True,
-                return_tensors="pt",
-                max_length=self.colbert_query_encoder_config["max_length"],
-            )
-            ids, mask = tokens["input_ids"], tokens["attention_mask"]
-            ids[:, 1] = self.colbert_query_encoder_config["q_marker_token_id"]
-            ids[ids == self.colbert_query_encoder_config["pad_token_id"]] = self.colbert_query_encoder_config["mask_token_id"]
-            embeddings = self.colbert_query_encoder(ids, mask)
-            return embeddings"""
         return self.colbert_searcher.encode([". " + query for query in queries])
 
 
@@ -163,25 +137,20 @@ class ColBERTServer(server_pb2_grpc.ServerServicer):
         
         response = requests.post(url, data=json.dumps(data), headers=headers).text
         response = json.loads(response).get('results', {})
-        print("Searching time of {} on node 1 {}: {}".format(qid, self.tag, time.time() - t2))
         
-        # for idxx, (ky, vl) in enumerate(sorted(response.items(), key=lambda x: -float(x[1]))):
-        #    self.pisa_results.append((f"{int(qid)}", f"{int(ky)}", f"{int(idxx+1)}", f"{float(vl)}"))
+        for idxx, (ky, vl) in enumerate(sorted(response.items(), key=lambda x: -float(x[1]))):
+            self.pisa_results.append((f"{int(qid)}", f"{int(ky)}", f"{int(idxx+1)}", f"{float(vl)}"))
 
 
         docs = np.array([int(x) for x in sorted(response.keys())])
         pisa_score = np.array([float(response[x]) for x in sorted(response.keys())])
         pisa_score = (pisa_score - pisa_score.mean()) / pisa_score.std()
 
-        # gr = torch.tensor(docs, dtype=torch.int)
         Q = self.colbert_encode([query])
-        print("Searching time of {} on node 2 {}: {}".format(qid, self.tag, time.time() - t2))
         pids_, _, scores_ = self.colbert_search(Q, docs, 200)
         
-        print("Searching time of {} on node {}: {}".format(qid, self.tag, time.time() - t2))
-        
-        # for idxx, (ky, vl) in enumerate(sorted(colbert_scores.items(), key=lambda x: -x[1])):
-        #    self.colbert_results.append((f"{int(qid)}", f"{int(ky)}", f"{int(idxx+1)}", f"{float(vl)}"))
+        for idxx, (ky, vl) in enumerate(sorted(zip(pids_, scores_), key=lambda x: -x[1])):
+           self.colbert_results.append((f"{int(qid)}", f"{int(ky)}", f"{int(idxx+1)}", f"{float(vl)}"))
         
         scores_ = np.array(scores_)
         scores_ = (scores_ - scores_.mean()) / scores_.std()
@@ -194,13 +163,14 @@ class ColBERTServer(server_pb2_grpc.ServerServicer):
         for d, v in zip(docs, pisa_score):
             combined_scores[d] += 0.5 * v
 
-        # self.dump()
         sorted_pids = sorted(combined_scores.items(), key=lambda x: -x[1])
         
         top_k = []
         for rank, (pid, score) in enumerate(sorted_pids):
             top_k.append({'pid': pid, 'rank': rank + 1, 'score': score})
 
+        print("Serving time of {}: {}".format(qid, time.time() - t2))
+        
         return self.convert_dict_to_protobuf({"qid": qid, "topk": top_k[:k]})
 
 
@@ -208,8 +178,6 @@ class ColBERTServer(server_pb2_grpc.ServerServicer):
         t2 = time.time()
         Q = self.colbert_encode([query])
         pids, ranks, scores = self.colbert_search(Q, None, k)
-
-        print("Searching time of {}: {}".format(qid, time.time() - t2))
 
         top_k = []
         for pid, rank, score in zip(pids, ranks, scores):
@@ -223,6 +191,8 @@ class ColBERTServer(server_pb2_grpc.ServerServicer):
         # self.dump()
         for idxx, (ky, vl) in enumerate(sorted(combined_scores.items(), key=lambda x: -x[1])):
             self.colbert_results.append((f"{int(qid)}", f"{int(ky)}", f"{int(idxx+1)}", f"{float(vl)}"))
+        
+        print("Searching time of {}: {}".format(qid, time.time() - t2))
 
         return self.convert_dict_to_protobuf({"qid": qid, "topk": top_k})
 
@@ -244,11 +214,12 @@ class ColBERTServer(server_pb2_grpc.ServerServicer):
             pids_.append(int(kk))
             scores_.append(float(v))
 
-        print("Searching time of {} on node {}: {}".format(qid, self.tag, time.time() - t2))
 
         top_k = []
         for pid, rank, score in zip(pids_, range(len(pids_)), scores_):
             top_k.append({'pid': pid, 'rank': rank + 1, 'score': score})
+        
+        print("Pisa time of {}: {}".format(qid, time.time() - t2))
 
         return self.convert_dict_to_protobuf({"qid": qid, "topk": top_k[:k]})
 
@@ -263,6 +234,10 @@ class ColBERTServer(server_pb2_grpc.ServerServicer):
     def Pisa(self, request, context):
         torch.set_num_threads(self.threads)
         return self.api_pisa_query(request.query, request.qid, request.k)
+
+    def DumpScores(self, request, context):
+        self.dump()
+        return server_pb2.Empty()
 
 
 def serve_ColBERT_server(args):
