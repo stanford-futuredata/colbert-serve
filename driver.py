@@ -90,7 +90,6 @@ async def run(args):
     open(args.output, "w").write("\n".join([str(x) for x in ret[1]]) + f"\nTotal time: {total_time}")
     print(f"Total time for {len(qvals)-100} requests:",  total_time)
 
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Evaluator for ColBERT')
     parser.add_argument('-w', '--num_workers', type=int, required=True,
@@ -105,8 +104,9 @@ if __name__ == '__main__':
                         help='Input file for inter request wait times')
     parser.add_argument('-e', '--experiment', type=str, default="search", choices=["search", "pisa", "serve"],
                         help='search or pisa or serve (pisa + rerank)')
-    parser.add_argument('-i', '--index', type=str, choices=["wiki", "lifestyle"],
+    parser.add_argument('-i', '--index', type=str, choices=["wiki", "msmarco", "lifestyle"],
                         required=True, help='Index to run')
+    parser.add_argument('-m', '--mmap', action="store_true", help='If the index is memory mapped')
 
     processes = []
     args = parser.parse_args()
@@ -118,6 +118,9 @@ if __name__ == '__main__':
     for node in range(args.num_servers):
         print("Starting process", node)
         arg_str = f"-w {args.num_workers} -i {args.index}" 
+        if args.mmap:
+            arg_str += " -m"
+
         processes.append(Popen(["python", "server.py"] + f"{arg_str}".split(" ")))
 
         times = 10

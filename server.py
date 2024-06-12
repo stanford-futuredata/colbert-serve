@@ -36,7 +36,6 @@ import ast
 import splade_pb2
 import splade_pb2_grpc
 
-
 class ColBERT(torch.nn.Module):
     def __init__(self, lm, linear):
         super().__init__()
@@ -47,13 +46,20 @@ class ColBERT(torch.nn.Module):
 
 
 class ColBERTServer(server_pb2_grpc.ServerServicer):
-    def __init__(self, num_workers, index):
+    def __init__(self, num_workers, index, mmap):
         self.tag = 0
         self.threads = num_workers
-        mmap = ast.literal_eval(os.environ["MMAP"])
         print(mmap)
         self.suffix = "" if not mmap else ".mmap"
-        self.index_name = "wiki.2018.latest" if index == "wiki" else "lifestyle.dev.nbits=2.latest"
+        # self.index_name = "wiki.2018.latest" if index == "wiki" else "lifestyle.dev.nbits=2.latest"
+        
+        if index == "wiki":
+            self.index_name = "wiki.2018.latest"
+        elif index == "msmarco":
+            self.index_name = "msmarco.nbits=2.latest"
+        else:
+            self.index_name = "lifestyle.dev.nbits=2.latest"
+        
         self.multiplier = 250 if index == "wiki" else 500
         self.index_name += self.suffix
         self.prefix = os.environ["DATA_PATH"]
@@ -90,7 +96,6 @@ class ColBERTServer(server_pb2_grpc.ServerServicer):
             load_index_with_mmap=mmap,
         )
 
-        
         process = psutil.Process()
         mem1 = process.memory_info().rss
         self.colbert_searcher = Searcher(
@@ -98,6 +103,7 @@ class ColBERTServer(server_pb2_grpc.ServerServicer):
             checkpoint=checkpoint_path,
             config=self.colbert_search_config,
         )
+        
         print(f"MMAP: {mmap}, Index size: {(process.memory_info().rss - mem1) / 1024}")
 
     def dump(self):
@@ -157,7 +163,7 @@ class ColBERTServer(server_pb2_grpc.ServerServicer):
         
         response = requests.post(url, data=json.dumps(data), headers=headers).text
         response = json.loads(response).get('results', {})
-        # print("Searching time of {} on node 1 {}: {}".format(qid, self.tag, time.time() - t2))
+        print("Searching time of {} on node 1 {}: {}".format(qid, self.tag, time.time() - t2))
         
         # for idxx, (ky, vl) in enumerate(sorted(response.items(), key=lambda x: -float(x[1]))):
         #    self.pisa_results.append((f"{int(qid)}", f"{int(ky)}", f"{int(idxx+1)}", f"{float(vl)}"))
@@ -167,10 +173,10 @@ class ColBERTServer(server_pb2_grpc.ServerServicer):
         pisa_score = np.array([float(response[x]) for x in sorted(response.keys())])
         pisa_score = (pisa_score - pisa_score.mean()) / pisa_score.std()
 
-        gr = torch.tensor(docs, dtype=torch.int)
+        # gr = torch.tensor(docs, dtype=torch.int)
         Q = self.colbert_encode([query])
-        # print("Searching time of {} on node 2 {}: {}".format(qid, self.tag, time.time() - t2))
-        pids_, _, scores_ = self.colbert_search(Q, gr, 200)
+        print("Searching time of {} on node 2 {}: {}".format(qid, self.tag, time.time() - t2))
+        pids_, _, scores_ = self.colbert_search(Q, docs, 200)
         
         print("Searching time of {} on node {}: {}".format(qid, self.tag, time.time() - t2))
         
@@ -262,7 +268,7 @@ class ColBERTServer(server_pb2_grpc.ServerServicer):
 def serve_ColBERT_server(args):
     connection = Listener(('localhost', 50040), authkey=b'password').accept()
     server = grpc.server(futures.ThreadPoolExecutor())
-    server_pb2_grpc.add_ServerServicer_to_server(ColBERTServer(args.num_workers, args.index), server)
+    server_pb2_grpc.add_ServerServicer_to_server(ColBERTServer(args.num_workers, args.index, args.mmap), server)
     listen_addr = '[::]:50050'
     server.add_insecure_port(listen_addr)
     print(f"Starting ColBERT server on {listen_addr}")
@@ -277,8 +283,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Server for ColBERT')
     parser.add_argument('-w', '--num_workers', type=int, required=True,
                        help='Number of worker threads per server')
-    parser.add_argument('-i', '--index', type=str, choices=["wiki", "lifestyle"],
+    parser.add_argument('-i', '--index', type=str, choices=["wiki", "msmarco", "lifestyle"],
                         required=True, help='Index to run')
+    parser.add_argument('-m', '--mmap', action="store_true", help='If the index is memory mapped')
 
     args = parser.parse_args()
     serve_ColBERT_server(args)

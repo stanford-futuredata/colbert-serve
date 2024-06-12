@@ -1,6 +1,6 @@
 PROCS=1
 lambda_values=("1.0" "0.05" "0.1" "0.2" "0.3" "0.5" "0.7" "0.9")
-exps=("search")
+exps=("search" "serve" "pisa")
 index="wiki"
 
 # Loop through the lambda values and run the command
