@@ -8,7 +8,7 @@ from concurrent import futures
 
 class SpladeServer(splade_pb2_grpc.SpladeServicer):
     def __init__(self):
-        model_type_or_dir = "naver/efficient-splade-V-large-query"
+        model_type_or_dir = "naver/efficient-splade-VI-BT-large-query"
         self.model = Splade(model_type_or_dir, agg="max")
         self.model.eval()
         self.tokenizer = AutoTokenizer.from_pretrained(model_type_or_dir)
