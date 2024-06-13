@@ -69,6 +69,7 @@ async def run(args):
 
     await asyncio.gather(*tasks)
 
+    await stubs[0].DumpScores(server_pb2.Empty())
     print("Warmup complete!")
 
     tasks = []

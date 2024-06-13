@@ -101,11 +101,13 @@ class ColBERTServer(server_pb2_grpc.ServerServicer):
             pisa_file = open("ranking_pisa.tsv", "w")
             pisa_file.write("\n".join(["\t".join(x) for x in sorted(self.pisa_results, key=lambda x: (int(x[0]), int(x[2])))])) 
             pisa_file.close()
+            self.pisa_results = []
         
         if self.colbert_results:
             colbert_file = open("ranking_colbert.tsv", "w")
             colbert_file.write("\n".join(["\t".join(x) for x in sorted(self.colbert_results, key=lambda x: (int(x[0]), int(x[2])))])) 
             colbert_file.close()
+            self.colbert_results = []
 
     def colbert_search(self, Q, pids, k=5):
         return self.colbert_searcher.dense_search(Q, k=k, pids=pids)
