@@ -18,6 +18,7 @@ cd splade_server/splade
 conda create -n splade_env python=3.9
 conda activate splade_env
 conda env create -f conda_splade_env.yml
+conda activate splade
 pip install grpcio grpcio-tools 
 python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. splade.proto 
 ```
