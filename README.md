@@ -72,7 +72,7 @@ python splade_server.py
 
 ### Running the main driver code
 ```
-python driver.py -n 1 -w 1 -i $index -t $input_timing_file -o $timing_output_file -r $rankings_output_file -e $exp
+python driver.py -w 1 -i $index -t $input_timing_file -o $timing_output_file -r $rankings_output_file -e $exp
 ```
 
 Run `python driver.py --help` for detailed explanation of all options.
