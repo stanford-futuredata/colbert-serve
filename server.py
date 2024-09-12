@@ -17,9 +17,8 @@ import psutil
 
 load_dotenv()
 
-sys.path.append(os.environ["SPLADE_PATH"])
-print(str(pathlib.Path(__file__).parent.resolve()) + "/ColBERT")
 sys.path.append(str(pathlib.Path(__file__).parent.resolve()) + "/ColBERT")
+sys.path.append(str(pathlib.Path(__file__).parent.resolve()) + "/splade_server")
 
 from colbert import Searcher
 from colbert.data import Queries
@@ -75,7 +74,6 @@ class ColBERTServer(server_pb2_grpc.ServerServicer):
 
         self.colbert_results = []
         self.pisa_results = []
-        
 
         checkpoint_path = self.prefix + "/msmarco.psg.kldR2.nway64.ib__colbert-400000/"
 
@@ -140,8 +138,8 @@ class ColBERTServer(server_pb2_grpc.ServerServicer):
         response = requests.post(url, data=json.dumps(data), headers=headers).text
         response = json.loads(response).get('results', {})
         
-        for idxx, (ky, vl) in enumerate(sorted(response.items(), key=lambda x: -float(x[1]))):
-            self.pisa_results.append((f"{int(qid)}", f"{int(ky)}", f"{int(idxx+1)}", f"{float(vl)}"))
+        for idx, (key, val) in enumerate(sorted(response.items(), key=lambda x: -float(x[1]))):
+            self.pisa_results.append((f"{int(qid)}", f"{int(key)}", f"{int(idx+1)}", f"{float(val)}"))
 
 
         docs = np.array([int(x) for x in sorted(response.keys())])
@@ -151,8 +149,8 @@ class ColBERTServer(server_pb2_grpc.ServerServicer):
         Q = self.colbert_encode([query])
         pids_, _, scores_ = self.colbert_search(Q, docs, 200)
         
-        for idxx, (ky, vl) in enumerate(sorted(zip(pids_, scores_), key=lambda x: -x[1])):
-           self.colbert_results.append((f"{int(qid)}", f"{int(ky)}", f"{int(idxx+1)}", f"{float(vl)}"))
+        for idx, (key, val) in enumerate(sorted(zip(pids_, scores_), key=lambda x: -x[1])):
+           self.colbert_results.append((f"{int(qid)}", f"{int(key)}", f"{int(idx+1)}", f"{float(val)}"))
         
         scores_ = np.array(scores_)
         scores_ = (scores_ - scores_.mean()) / scores_.std()
@@ -190,9 +188,8 @@ class ColBERTServer(server_pb2_grpc.ServerServicer):
         for d, v in zip(pids, scores):
             combined_scores[d] = v
         
-        # self.dump()
-        for idxx, (ky, vl) in enumerate(sorted(combined_scores.items(), key=lambda x: -x[1])):
-            self.colbert_results.append((f"{int(qid)}", f"{int(ky)}", f"{int(idxx+1)}", f"{float(vl)}"))
+        for idx, (key, val) in enumerate(sorted(combined_scores.items(), key=lambda x: -x[1])):
+            self.colbert_results.append((f"{int(qid)}", f"{int(key)}", f"{int(idx+1)}", f"{float(val)}"))
         
         print("Searching time of {}: {}".format(qid, time.time() - t2))
 
@@ -205,7 +202,6 @@ class ColBERTServer(server_pb2_grpc.ServerServicer):
         data = {"query": splade_q.query, "k": 200}
         headers = {'Content-Type': 'application/json'}
 
-        tpost = time.time()
         response = requests.post(url, data=json.dumps(data), headers=headers).text
         response = json.loads(response).get('results', {})
 
@@ -259,7 +255,7 @@ def serve_ColBERT_server(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Server for ColBERT')
     parser.add_argument('-w', '--num_workers', type=int, required=True,
-                       help='Number of worker threads per server')
+                       help='Number of worker threads (torch.num_threads)')
     parser.add_argument('-i', '--index', type=str, choices=["wiki", "msmarco", "lifestyle"],
                         required=True, help='Index to run')
     parser.add_argument('-m', '--mmap', action="store_true", help='If the index is memory mapped')
