@@ -37,7 +37,6 @@ All necessary data must be placed in a specific folder. This folder's path must 
 The folder should be structured as follows:
 ```
 |- <experiment_name> 
-|  |- collection.tsv (collection of the corpus)
 |  |- questions.tsv  (questions dataset to be run against the server)
 |
 |- indexes (must contain the relevant ColBERT indices which are MMAP compatible if necessary)
