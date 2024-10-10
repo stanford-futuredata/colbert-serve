@@ -75,7 +75,7 @@ class ColBERTServer(server_pb2_grpc.ServerServicer):
         self.colbert_results = []
         self.pisa_results = []
 
-        checkpoint_path = self.prefix + "/msmarco.psg.kldR2.nway64.ib__colbert-400000/"
+        checkpoint_path = self.prefix + "/colbertv2.0/"
 
         self.colbert_search_config = ColBERTConfig(
             index_root=os.path.join(os.environ["DATA_PATH"], "indexes"),

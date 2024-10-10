@@ -96,8 +96,7 @@ if __name__ == '__main__':
                         help='Input file for inter request wait times')
     parser.add_argument('-e', '--experiment', type=str, default="search", choices=["search", "pisa", "serve"],
                         help='search or pisa or serve (pisa + rerank)')
-    parser.add_argument('-i', '--index', type=str, choices=["wiki", "msmarco", "lifestyle"],
-                        required=True, help='Index to run')
+    parser.add_argument('-i', '--index', type=str, required=True, help='Index to run (use "wiki", "msmarco", "lifestyle" to repro the paper, or specify your own index name)')
     parser.add_argument('-m', '--mmap', action="store_true", help='If the index is memory mapped')
 
     args = parser.parse_args()
