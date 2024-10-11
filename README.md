@@ -109,7 +109,7 @@ Follow the [instructions](https://gist.github.com/saarthaks/4ef756f345b478d7e96b
 ## Running
 From the `colbert-serve` directory:
 
-### Run Pisa and Splade
+### Prerequisite: Run Pisa and Splade
 
 `conda activate splade`, then, run the following code to start the Pisa and Splade servers in separate terminals. (Note: Pisa and Splade isn't required if the main driver script is being run with the `-e search` option).
 
@@ -139,3 +139,21 @@ python driver.py -w 1 -i $index -e $exp -t $input_timing_file -o $timing_output_
 - Remove `-m` to disable memory mapping.
 
 Run `python driver.py --help` for detailed explanation of all options.
+
+### Hosting your personal server
+To host your own server, run the following command:
+```bash
+conda activate colbert
+python server.py -w {num_torch_threads} -i $index [-m]
+```
+
+Example snippet for querying the server:
+```python
+import grpc
+import server_pb2_grpc
+
+stub = server_pb2_grpc.ServerStub(grpc.insecure_channel('localhost:50050'))
+q = server_pb2.Query(query="Who is the president of the US?", qid=1000, k=100)
+
+print(stub.Search(q))
+```

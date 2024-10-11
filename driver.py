@@ -101,7 +101,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    arg_str = f"-w {args.num_workers} -i {args.index}" 
+    arg_str = f"-w {args.num_workers} -i {args.index} -r driver" 
     if args.mmap:
         arg_str += " -m"
 

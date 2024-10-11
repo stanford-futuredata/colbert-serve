@@ -239,14 +239,20 @@ class ColBERTServer(server_pb2_grpc.ServerServicer):
 
 
 def serve_ColBERT_server(args):
-    connection = Listener(('localhost', 50040), authkey=b'password').accept()
+    connection = None
+    if args.run_mode == "driver":
+        connection = Listener(('localhost', 50040), authkey=b'password')
+
     server = grpc.server(futures.ThreadPoolExecutor())
     server_pb2_grpc.add_ServerServicer_to_server(ColBERTServer(args.num_workers, args.index, args.mmap), server)
     listen_addr = '[::]:50050'
     server.add_insecure_port(listen_addr)
     print(f"Starting ColBERT server on {listen_addr}")
-    connection.send("Done")
-    connection.close()
+    
+    if connection is not None:
+        connection.send("Done")
+        connection.close()
+
     server.start()
     server.wait_for_termination()
     print("Terminated")
@@ -256,9 +262,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Server for ColBERT')
     parser.add_argument('-w', '--num_workers', type=int, required=True,
                        help='Number of worker threads (torch.num_threads)')
-    parser.add_argument('-i', '--index', type=str, choices=["wiki", "msmarco", "lifestyle"],
-                        required=True, help='Index to run')
+    parser.add_argument('-i', '--index', type=str, equired=True, help='Index to run (use "wiki", "msmarco", "lifestyle" to repro the paper, or specify your own index name)')
     parser.add_argument('-m', '--mmap', action="store_true", help='If the index is memory mapped')
+    parser.add_argument("-r", "--run_mode", default="server", choices=["server", "driver"], help="Use -r driver while invoking from driver.py")
 
     args = parser.parse_args()
     serve_ColBERT_server(args)
