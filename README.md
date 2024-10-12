@@ -155,5 +155,5 @@ import server_pb2_grpc
 stub = server_pb2_grpc.ServerStub(grpc.insecure_channel('localhost:50050'))
 q = server_pb2.Query(query="Who is the president of the US?", qid=1000, k=100)
 
-print(stub.Search(q))
+print(stub.Serve(q))
 ```
