@@ -150,6 +150,7 @@ python server.py -w {num_torch_threads} -i $index [-m]
 Example snippet for querying the server:
 ```python
 import grpc
+import server_pb2
 import server_pb2_grpc
 
 stub = server_pb2_grpc.ServerStub(grpc.insecure_channel('localhost:50050'))
