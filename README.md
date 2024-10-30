@@ -70,7 +70,7 @@ lifestyle (lifestyle.dev.nbits=2.latest<.mmap>)
 Step 4: Follow the [Running](#running) section. Run the Pisa and Splade servers; then, run the main driver to get the latency and ranking results.
 
 ## Data
-All data used in this paper can be downloaded from [HuggingFace Hub](https://huggingface.co/colbert-ir/colbert_serve/tree/main). The folders and files are already formatted and placed in the right place, and are ready to use.
+All data used in this paper can be downloaded from [HuggingFace Hub](removed the link for ECIR anonymous requirement. Will make public after paper is accepted). The folders and files are already formatted and placed in the right place, and are ready to use.
 
 Use the example script to download `lifestyle` data and indexes:
 ```bash
@@ -101,7 +101,7 @@ python -m colbert.utils.coalesce --input=/path/to/index/ --output=/path/to/index
 ```
 
 ### Pisa
-Follow the [instructions](https://gist.github.com/saarthaks/4ef756f345b478d7e96b107dea506217) to create the Pisa index using the Splade model.
+Follow the [instructions](removed the link for ECIR anonymous requirement. Will make public after paper is accepted) to create the Pisa index using the Splade model.
 
 
 
