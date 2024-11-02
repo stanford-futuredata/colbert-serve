@@ -67,7 +67,7 @@ async def run(args):
     tasks = []
     t = time.time()
 
-    for i in range(min(len(qvals), 1000)):
+    for i in range(len(qvals)):
         request = server_pb2.Query(query=qvals[i][1], qid=qvals[i][0], k=100)
         tasks.append(asyncio.ensure_future(run_request(stub, request,  args.experiment)))
         await asyncio.sleep(inter_request_time[i % length])
@@ -80,7 +80,7 @@ async def run(args):
     total_time = str(time.time()-t)
 
     open(args.output, "w").write("\n".join([str(x) for x in ret[1]]) + f"\nTotal time: {total_time}")
-    print(f"Total time for {len(qvals)-100} requests:",  total_time)
+    print(f"Total time for {len(qvals)} requests:",  total_time)
 
     await stub.DumpScores(server_pb2.Empty())
 

@@ -75,7 +75,7 @@ class ColBERTServer(server_pb2_grpc.ServerServicer):
         self.colbert_results = []
         self.pisa_results = []
 
-        checkpoint_path = self.prefix + "/colbertv2.0/"
+        checkpoint_path = "colbert-ir/colbertv2.0"
 
         self.colbert_search_config = ColBERTConfig(
             index_root=os.path.join(os.environ["DATA_PATH"], "indexes"),
@@ -158,10 +158,10 @@ class ColBERTServer(server_pb2_grpc.ServerServicer):
         combined_scores = {}
         
         for d, v in zip(pids_, scores_):
-            combined_scores[d] = 0.5 * v
+            combined_scores[d] = 0.7 * v
         
         for d, v in zip(docs, pisa_score):
-            combined_scores[d] += 0.5 * v
+            combined_scores[d] += 0.3 * v
 
         sorted_pids = sorted(combined_scores.items(), key=lambda x: -x[1])
         
@@ -241,7 +241,7 @@ class ColBERTServer(server_pb2_grpc.ServerServicer):
 def serve_ColBERT_server(args):
     connection = None
     if args.run_mode == "driver":
-        connection = Listener(('localhost', 50040), authkey=b'password')
+        connection = Listener(('localhost', 50040), authkey=b'password').accept()
 
     server = grpc.server(futures.ThreadPoolExecutor())
     server_pb2_grpc.add_ServerServicer_to_server(ColBERTServer(args.num_workers, args.index, args.mmap), server)
@@ -262,7 +262,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Server for ColBERT')
     parser.add_argument('-w', '--num_workers', type=int, required=True,
                        help='Number of worker threads (torch.num_threads)')
-    parser.add_argument('-i', '--index', type=str, equired=True, help='Index to run (use "wiki", "msmarco", "lifestyle" to repro the paper, or specify your own index name)')
+    parser.add_argument('-i', '--index', type=str, required=True, help='Index to run (use "wiki", "msmarco", "lifestyle" to repro the paper, or specify your own index name)')
     parser.add_argument('-m', '--mmap', action="store_true", help='If the index is memory mapped')
     parser.add_argument("-r", "--run_mode", default="server", choices=["server", "driver"], help="Use -r driver while invoking from driver.py")
 
