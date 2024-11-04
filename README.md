@@ -62,9 +62,9 @@ The folder should be structured as follows:
 ```
 The script supports the following `dataset_name` (ColBERT index name is mentioned in parantheses)
 ```
-wiki (wiki.2018.latest<.mmap>)
-msmarco (msmarco.nbits=2.latest<.mmap>)
-lifestyle (lifestyle.dev.nbits=2.latest<.mmap>)
+wiki (wiki.2018.latest[.mmap])
+msmarco (msmarco.nbits=2.latest[.mmap])
+lifestyle (lifestyle.dev.nbits=2.latest[.mmap])
 ```
 
 Step 4: Follow the [Running](#running) section. Run the Pisa and Splade servers; then, run the main driver to get the latency and ranking results.
@@ -118,7 +118,7 @@ conda activate splade
 
 # Pisa:
 ./pisa/build/bin/serve --encoding block_simdbp --index <file.idx> --wand <file.bmw> --documents <file.docmap> --terms <file.termmap> --algorithm maxscore --scorer quantized --weighted
-## example:
+## example (assuming putting pisa index files in data/lotte-lifestyle-pisa-index/)
 ## ./pisa/build/bin/serve --encoding block_simdbp --index data/lotte-lifestyle-pisa-index/lotte-lifestyle-index.block_simdbp.idx --wand data/lotte-lifestyle-pisa-index/lotte-lifestyle-index.fixed-40.bmw --documents data/lotte-lifestyle-pisa-index/lotte-lifestyle-index.docmap --terms data/lotte-lifestyle-pisa-index/lotte-lifestyle-index.termmap --algorithm maxscore --scorer quantized --weighted
 
 # Splade:
@@ -157,4 +157,46 @@ stub = server_pb2_grpc.ServerStub(grpc.insecure_channel('localhost:50050'))
 q = server_pb2.Query(query="Who is the president of the US?", qid=1000, k=100)
 
 print(stub.Serve(q))
+```
+
+## Evaluation
+First, transform the result files into `.trec` format:
+```
+<query_id> Q0 <doc_id> <rank> <score> <run_id>
+```
+### MS MARCO
+Use `pyserini.eval.trec_eval` to evaluate:
+```bash
+conda activate splade
+# Get recall scores (@5, 10, 15, 20, 30, 100, 200, 500, 1000)
+python -m pyserini.eval.trec_eval -c -mrecall msmarco-passage-dev-subset $ranking_trec_file
+# Get specific recall@k score
+python -m pyserini.eval.trec_eval -c -mrecall.<k> msmarco-passage-dev-subset $ranking_trec_file
+# Get MRR score
+python -m pyserini.eval.trec_eval -c -M 10 -m recip_rank msmarco-passage-dev-subset $ranking_trec_file
+```
+
+Similarly, you can evaluate on **custom datasets**, by providing your custom qrel file:
+```bash
+python -m pyserini.eval.trec_eval -c -mrecall.1000 -mmap <path/to/custom_qrels> <path/to/run_file>
+```
+### Wikipedia
+Transform the `.trec` file to the DPR file:
+```bash
+python -m pyserini.eval.convert_trec_run_to_dpr_retrieval_run --topics 'dpr-nq-dev' --index wikipedia-dpr --input $ranking_trec_file --output $ranking_dpr_file
+```
+Then, use `pyserini.eval.evaluate_dpr_retrieval` to evaluate the DPR file:
+```bash
+python -m pyserini.eval.evaluate_dpr_retrieval --retrieval $file --topk 5 20 100 500 1000
+```
+### LoTTE
+Following [ColBERT repo](https://github.com/stanford-futuredata/ColBERT/blob/main/LoTTE.md), download the LoTTE dataset, which also contains a sciprt to evaluate LoTTE rankings: `evaluate_lotte_rankings.py`:
+```bash
+python evaluate_lotte_rankings.py --k 5 --split dev --data_dir $lotte_data_dir --rankings_dir $ranking_file_dir
+```
+The ranking file should be put in `$ranking_file_dir/$split`, and named as:
+```
+|- $ranking_file_dir
+    |- dev
+    |  |- lifestyle.search.ranking.tsv
 ```
