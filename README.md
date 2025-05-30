@@ -27,6 +27,7 @@ python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. splade.proto
 
 ### Building Pisa
 ```bash
+conda deactivate
 cd ../pisa
 mkdir build
 cd build
